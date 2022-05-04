@@ -1,0 +1,195 @@
+@use "sass:math";
+@use "sass:map";
+@use "sass:list";
+
+//=== Animation options
+// Number of particles
+$particle-number: 1000;
+
+// HSL color properties
+$particle-sat: 100%;
+$particle-light: 70%;
+
+// Duration of each step
+$step-duration: 1.5s;
+
+// Step options
+$animation-options: (
+  (
+    size: 3,
+    width: 20,
+    height: 20,
+    loops: -32,
+    twists: -16,
+    minHue: 300,
+    maxHue: 360,
+    blur: 0,
+    scale: 0,
+    template: "sincos"
+  ),
+  (
+    size: 3,
+    width: 30,
+    height: 30,
+    loops: 17,
+    twists: 17,
+    minHue: 180,
+    maxHue: 360,
+    blur: 0,
+    scale: 0,
+    template: "sincos"
+  ),
+  (
+    size: 3,
+    width: 50,
+    height: 50,
+    loops: 20,
+    twists: 20,
+    minHue: 180,
+    maxHue: 240,
+    blur: 0,
+    scale: 1,
+    template: "cossin"
+  ),
+  (
+    size: 3,
+    width: 0.3,
+    height: 0.3,
+    loops: 10,
+    twists: 10,
+    minHue: 0,
+    maxHue: 360,
+    blur: 0,
+    scale: 1
+  ),
+  (
+    size: 2,
+    width: 0.3,
+    height: 0.3,
+    loops: -3,
+    twists: -3,
+    minHue: 0,
+    maxHue: 360,
+    blur: 0,
+    scale: 0
+  )
+);
+
+//=== Utilities
+// Keep hue between min and max values
+@function scale-hue($index, $min, $max) {
+  @if ($index == 0) {
+    @return $min;
+  }
+
+  //@return math.div($index * ($max - $min), $particle-number) + $min;
+  @return ($index * ($max - $min)) / $particle-number + $min;
+}
+
+// Shortcut functions to call options from maps above
+@function get-option($option, $index) {
+  @return map.get(list.nth($animation-options, $index), $option);
+}
+
+//=== Generating the shadows
+
+// Create a valid box-shadow
+@function create-shadow($index, $n) {
+  $x: 0;
+  $y: 0;
+
+  @if (get-option(template, $index) == "sincos") {
+    $x: math.sin($n * get-option(loops, $index));
+    $y: math.cos($n * get-option(twists, $index));
+  } @else if(get-option(template, $index) == "cossin") {
+    $x: math.cos($n * get-option(loops, $index));
+    $y: math.sin($n * get-option(twists, $index));
+  } @else {
+    $x: math.cos($n * get-option(loops, $index)) * $n;
+    $y: math.sin($n * get-option(twists, $index)) * $n;
+  }
+
+  $x: $x * get-option(size, $index) * get-option(width, $index) * 0.1vmax;
+  $y: $y * get-option(size, $index) * get-option(height, $index) * 0.1vmax;
+
+  $blur: get-option(blur, $index);
+  $blur: if($blur > 0, math.round(math.cos($n) * $blur * 1px + $blur), 0);
+
+  $scale: get-option(scale, $index);
+  $scale: if($scale > 0, math.round(math.sin($n) * $scale * 1px), "");
+
+  $color: hsl(
+    scale-hue($n, get-option(minHue, $index), get-option(maxHue, $index)) * 1deg,
+    $particle-sat,
+    $particle-light
+  );
+
+  @return #{$x $y $blur $scale $color};
+}
+
+// This var will hold the completed shadows in list form
+$shadows: ();
+
+// Generate all shadows from options
+@each $options in $animation-options {
+  $current-shadow: ();
+  $index: list.index($animation-options, $options);
+
+  @for $n from 0 through $particle-number {
+    $current-shadow: list.append(
+      $current-shadow,
+      create-shadow($index, $n),
+      comma
+    );
+  }
+
+  $shadows: list.append($shadows, $current-shadow);
+}
+
+//=== Create animation
+$number-of-steps: list.length($shadows);
+$animation-duration: $step-duration * $number-of-steps;
+
+// The keyframes
+@keyframes particles {
+  $i: 0;
+  $percent: 100% / ($number-of-steps - 1);
+
+  @each $shadow in $shadows {
+    #{$percent * $i} {
+      box-shadow: $shadow;
+    }
+
+    $i: $i + 1;
+  }
+}
+
+// The particle
+body::before {
+  // For pseudo-element
+  content: "";
+  display: block;
+
+  // Particle styling
+  border-radius: 50%;
+  width: get-option(size, 1) * 1px;
+  height: get-option(size, 1) * 1px;
+
+  // Animation
+  animation: particles $animation-duration infinite alternate ease-in-out;
+  will-change: box-shadow;
+}
+
+//=== Pen styling, ignore
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: hsl(284, 85, 5);
+  display: flex;
+  place-content: center;
+  place-items: center;
+}
